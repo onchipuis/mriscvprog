@@ -16,6 +16,13 @@ For programming mRISCV on fpga or chip version needed to do this:
 
 This worked for us, its very ugly and we promise to fix it as soon as possible.
 
+UPDATE 2:
+
+- run ./mRISCVtest1, then press RESET button on the board, then ctrl-c it.
+- run ./do.sh for some test programation.
+
+Now is easier to program this thing
+
 # DOCUMENTATION:
 
 Usage: mRISCVprog [OPTION...] FILE
