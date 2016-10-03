@@ -18,8 +18,7 @@
  */
 
 // compile using:
-// gcc -Wall mRISCVprog.c -o mRISCVprog -L./ -lMPSSE -lftd2xx -ldl
-// gcc -Wall mRISCVprog.c -DGW32C -o mRISCVprog.exe -L./ -lMPSSE -lftd2xx -lgw32c -lintl-8
+// gcc -m32 -Wall mRISCVprog.c -o mRISCVprog -L./ -lMPSSE -lftd2xx -ldl
 // execute it using:
 // LD_LIBRARY_PATH=$LD_LIBRARY_PATH:./ ./mRISCVprog
 /******************************************************************************/
@@ -32,7 +31,7 @@
 #include <argp.h>
 /* OS specific libraries */
 #ifdef _WIN32
-//#include<windows.h>
+#include<windows.h>
 #endif
 
 #ifdef __linux
@@ -40,7 +39,7 @@
 #endif
 
 /* Include D2XX header*/
-//#include "WinTypes.h"
+#include "WinTypes.h"
 #include "ftd2xx.h"
 
 /* Include libMPSSE header */
@@ -68,7 +67,7 @@ encountered \n",__FILE__, __LINE__, __FUNCTION__);return 1;}else{;}};
 #define SPI_DEVICE_BUFFER_SIZE		256
 #define SPI_CLOCK_RATE_HZ			10000
 #define MRISCV_MAX_SIZE				4096
-#define MRISCV_SPI_DUMMY_BITS		10
+#define MRISCV_SPI_DUMMY_BITS		3
 #define MRISCV_SPI_TASK_BITS		2
 #define MRISCV_SPI_ADDR_BITS 		32
 #define MRISCV_SPI_DATA_BITS 		32
@@ -79,13 +78,10 @@ encountered \n",__FILE__, __LINE__, __FUNCTION__);return 1;}else{;}};
 #define MRISCV_SPI_COMM_SEND_BITS	MRISCV_SPI_TASK_BITS
 #define MRISCV_SPI_READ_STATUS_BITS	MRISCV_SPI_DATA_BITS
 #define MRISCV_SPI_READ_SEND_BITS	MRISCV_SPI_DATA_BITS
-#define MRISCV_CONFIG_MPSSE_READ	(SPI_CONFIG_OPTION_MODE2 | SPI_CONFIG_OPTION_CS_DBUS3 | SPI_CONFIG_OPTION_CS_ACTIVELOW)
-#define MRISCV_CONFIG_MPSSE_WRITE	(SPI_CONFIG_OPTION_MODE0 | SPI_CONFIG_OPTION_CS_DBUS3 | SPI_CONFIG_OPTION_CS_ACTIVELOW)
 #define MRISCV_TASK_STATUS			0x0
 #define MRISCV_TASK_READ			0x1
 #define MRISCV_TASK_WRITE			0x2
 #define MRISCV_TASK_SEND			0x3
-#define MAX_COUNT_TIMEOUT			1000
 
 /******************************************************************************/
 /*								Struct definitions							  	    */
@@ -111,7 +107,6 @@ parse_opt (int key, char *arg, struct argp_state *state);
 /******************************************************************************/
 /*								Global variables							  	    */
 /******************************************************************************/
-ChannelConfig channelConf = {0};
 static FT_HANDLE ftHandle;
 static uint8 buffer[SPI_DEVICE_BUFFER_SIZE] = {0};
 /* Program documentation. */
@@ -230,66 +225,6 @@ parse_opt (int key, char *arg, struct argp_state *state)
   return 0;
 }
 
-static int send_dummy(void)
-{
-	uint32 sizeToTransfer = 0;
-	uint32 sizeTransfered;
-	uint8 writeComplete=0;
-	FT_STATUS status;
-	
-	sizeToTransfer=0;		// This is for forcing CSdisable
-	sizeTransfered=0;
-	buffer[0] = 0;
-	status = SPI_Write(ftHandle, buffer, sizeToTransfer, &sizeTransfered,
-		SPI_TRANSFER_OPTIONS_SIZE_IN_BITS|
-		SPI_TRANSFER_OPTIONS_CHIPSELECT_DISABLE);
-	APP_CHECK_STATUS(status); 
-	
-	sizeToTransfer=MRISCV_SPI_DUMMY_BITS;
-	sizeTransfered=0;
-	buffer[0] = 0;
-	status = SPI_Write(ftHandle, buffer, sizeToTransfer, &sizeTransfered,
-		SPI_TRANSFER_OPTIONS_SIZE_IN_BITS|
-		SPI_TRANSFER_OPTIONS_CHIPSELECT_DISABLE);
-	APP_CHECK_STATUS(status); 
-	return 1;
-}
-
-static int read_status(uint8 *stat)
-{
-	uint32 sizeToTransfer = 0;
-	uint32 sizeTransfered;
-	uint8 writeComplete=0;
-	FT_STATUS status;
-	send_dummy();
-	/*Write 2 bit SEND STATUS*/
-	sizeToTransfer=MRISCV_SPI_COMM_STATUS_BITS;
-	sizeTransfered=0;
-	buffer[0] = MRISCV_TASK_STATUS << 6;	/* Write command (2bit, 6-bit displaced)*/
-	status = SPI_Write(ftHandle, buffer, sizeToTransfer, &sizeTransfered,
-		SPI_TRANSFER_OPTIONS_SIZE_IN_BITS|
-		SPI_TRANSFER_OPTIONS_CHIPSELECT_ENABLE);
-	APP_CHECK_STATUS(status);
-
-	/*Read the status*/
-	sizeToTransfer=MRISCV_SPI_READ_STATUS_BITS;
-
-	sizeTransfered=0;
-	status = SPI_Read(ftHandle, buffer, sizeToTransfer, &sizeTransfered,
-		SPI_TRANSFER_OPTIONS_SIZE_IN_BITS|
-		SPI_TRANSFER_OPTIONS_CHIPSELECT_DISABLE);
-	APP_CHECK_STATUS(status);
-
-	/* Dummy Bits, for issue aditional clk cycles */
-	send_dummy();
-	
-	/*Is done?*/
-	(*stat) = buffer[3];
-	
-	send_dummy();
-	return 1;
-}
-
 /*!
  * \brief Write some word at some addr.
  *
@@ -306,18 +241,13 @@ static int write_single_word(uint32 address, uint32 data)
 	uint32 sizeToTransfer = 0;
 	uint32 sizeTransfered;
 	uint8 writeComplete=0;
-	uint8 stat;
-	uint32 count = 0;
 	FT_STATUS status;
-RESTART_WRITE:
-	/* Dummy Bits, for issue aditional clk cycles */
-	send_dummy();
 
 	/* CS_High + Write command + Address */
 	sizeToTransfer=MRISCV_SPI_COMM_WRITE_BITS;
 	sizeTransfered=0;
-	//buffer[0] = ;	/* Write command (2bit, 6-bit displaced)*/
-	buffer[0] = (MRISCV_TASK_WRITE << 6) | ( ( address >> 26 ) & 0x3F ); 	/*MSB  6-bit addr bits*/
+	buffer[0] = MRISCV_TASK_WRITE << 6;	/* Write command (2bit, 6-bit displaced)*/
+	buffer[0] = buffer[0] | ( ( address >> 26 ) & 0x3F ); 	/*MSB  6-bit addr bits*/
 	buffer[1] = ( ( address >> 18 ) & 0xFF ); 				/*Next 8-bit addr bits*/
 	buffer[2] = ( ( address >> 10 ) & 0xFF ); 				/*Next 8-bit addr bits*/
 	buffer[3] = ( ( address >> 2 ) & 0xFF ); 				/*Next 8-bit addr bits*/
@@ -334,21 +264,42 @@ RESTART_WRITE:
 	APP_CHECK_STATUS(status);
 	
 	/* Dummy Bits, for issue aditional clk cycles */
-	send_dummy();
+	sizeToTransfer=MRISCV_SPI_DUMMY_BITS;
+	sizeTransfered=0;
+	buffer[0] = 0;
+	status = SPI_Write(ftHandle, buffer, sizeToTransfer, &sizeTransfered,
+		SPI_TRANSFER_OPTIONS_SIZE_IN_BITS);
+	APP_CHECK_STATUS(status);
 	
 	while(1) {
-		read_status(&stat);
-		if((stat & 0x7)) 
-		{
-			count ++;
-			if(count > MAX_COUNT_TIMEOUT)
-			{
-				count = 0;
-				printf("TIMEOUT WRITE, RETRYING\n");
-				goto RESTART_WRITE;
-			}
-		}
-		else break;
+
+		/*Write 2 bit SEND STATUS*/
+		sizeToTransfer=MRISCV_SPI_COMM_STATUS_BITS;
+		sizeTransfered=0;
+		buffer[0] = MRISCV_TASK_STATUS << 6;	/* Write command (2bit, 6-bit displaced)*/
+		status = SPI_Write(ftHandle, buffer, sizeToTransfer, &sizeTransfered,
+			SPI_TRANSFER_OPTIONS_SIZE_IN_BITS|
+			SPI_TRANSFER_OPTIONS_CHIPSELECT_ENABLE);
+		APP_CHECK_STATUS(status);
+	
+		/*Read the status*/
+		sizeToTransfer=MRISCV_SPI_READ_STATUS_BITS;
+		sizeTransfered=0;
+		status = SPI_Read(ftHandle, buffer, sizeToTransfer, &sizeTransfered,
+			SPI_TRANSFER_OPTIONS_SIZE_IN_BITS|
+			SPI_TRANSFER_OPTIONS_CHIPSELECT_DISABLE);
+		APP_CHECK_STATUS(status);
+	
+		/* Dummy Bits, for issue aditional clk cycles */
+		sizeToTransfer=MRISCV_SPI_DUMMY_BITS;
+		sizeTransfered=0;
+		buffer[0] = 0;
+		status = SPI_Write(ftHandle, buffer, sizeToTransfer, &sizeTransfered,
+			SPI_TRANSFER_OPTIONS_SIZE_IN_BITS);
+		APP_CHECK_STATUS(status);
+		
+		/*Is done?*/
+		if((buffer[3] & 0x3) == 0) break;
 	}
 
 	return 1;
@@ -370,19 +321,13 @@ static int read_single_word(uint32 address, uint32 *data)
 	uint32 sizeToTransfer = 0;
 	uint32 sizeTransfered;
 	uint8 writeComplete=0;
-	uint8 stat;
-	uint32 count = 0;
 	FT_STATUS status;
-
-RESTART_READ:
-	/* Dummy Bits, for issue aditional clk cycles */
-	send_dummy();
 
 	/* CS_High + Write command + Address */
 	sizeToTransfer=MRISCV_SPI_COMM_WRITE_BITS;
 	sizeTransfered=0;
-	//buffer[0] = ;	/* Write command (2bit, 6-bit displaced)*/
-	buffer[0] = (MRISCV_TASK_READ << 6) | ( ( address >> 26 ) & 0x3F ); 	/*MSB  6-bit addr bits*/
+	buffer[0] = MRISCV_TASK_READ << 6;	/* Write command (2bit, 6-bit displaced)*/
+	buffer[0] = buffer[0] | ( ( address >> 26 ) & 0x3F ); 	/*MSB  6-bit addr bits*/
 	buffer[1] = ( ( address >> 18 ) & 0xFF ); 				/*Next 8-bit addr bits*/
 	buffer[2] = ( ( address >> 10 ) & 0xFF ); 				/*Next 8-bit addr bits*/
 	buffer[3] = ( ( address >> 2 ) & 0xFF ); 				/*Next 8-bit addr bits*/
@@ -399,21 +344,42 @@ RESTART_READ:
 	APP_CHECK_STATUS(status);
 	
 	/* Dummy Bits, for issue aditional clk cycles */
-	send_dummy();
+	sizeToTransfer=MRISCV_SPI_DUMMY_BITS;
+	sizeTransfered=0;
+	buffer[0] = 0;
+	status = SPI_Write(ftHandle, buffer, sizeToTransfer, &sizeTransfered,
+		SPI_TRANSFER_OPTIONS_SIZE_IN_BITS);
+	APP_CHECK_STATUS(status);
 	
 	while(1) {
-		read_status(&stat);
-		if((stat & 0x7)) 
-		{
-			count ++;
-			if(count > MAX_COUNT_TIMEOUT)
-			{
-				count = 0;
-				printf("TIMEOUT READ, RETRYING\n");
-				goto RESTART_READ;
-			}
-		}
-		else break;
+
+		/*Write 2 bit SEND STATUS*/
+		sizeToTransfer=MRISCV_SPI_COMM_STATUS_BITS;
+		sizeTransfered=0;
+		buffer[0] = MRISCV_TASK_STATUS << 6;	/* Write command (2bit, 6-bit displaced)*/
+		status = SPI_Write(ftHandle, buffer, sizeToTransfer, &sizeTransfered,
+			SPI_TRANSFER_OPTIONS_SIZE_IN_BITS|
+			SPI_TRANSFER_OPTIONS_CHIPSELECT_ENABLE);
+		APP_CHECK_STATUS(status);
+	
+		/*Read the status*/
+		sizeToTransfer=MRISCV_SPI_READ_STATUS_BITS;
+		sizeTransfered=0;
+		status = SPI_Read(ftHandle, buffer, sizeToTransfer, &sizeTransfered,
+			SPI_TRANSFER_OPTIONS_SIZE_IN_BITS|
+			SPI_TRANSFER_OPTIONS_CHIPSELECT_DISABLE);
+		APP_CHECK_STATUS(status);
+	
+		/* Dummy Bits, for issue aditional clk cycles */
+		sizeToTransfer=MRISCV_SPI_DUMMY_BITS;
+		sizeTransfered=0;
+		buffer[0] = 0;
+		status = SPI_Write(ftHandle, buffer, sizeToTransfer, &sizeTransfered,
+			SPI_TRANSFER_OPTIONS_SIZE_IN_BITS);
+		APP_CHECK_STATUS(status);
+		
+		/*Is done?*/
+		if((buffer[3] & 0x3) == 0) break;
 	}
 	
 	/*Write 2 bit SEND RDATA*/
@@ -439,7 +405,12 @@ RESTART_READ:
 	(*data) |= buffer[3];
 	
 	/* Dummy Bits, for issue aditional clk cycles */
-	send_dummy();
+	sizeToTransfer=MRISCV_SPI_DUMMY_BITS;
+	sizeTransfered=0;
+	buffer[0] = 0;
+	status = SPI_Write(ftHandle, buffer, sizeToTransfer, &sizeTransfered,
+		SPI_TRANSFER_OPTIONS_SIZE_IN_BITS);
+	APP_CHECK_STATUS(status);
 
 	return 1;
 }
@@ -461,22 +432,20 @@ static int reset_status(uint8 state)
 	uint32 sizeTransfered;
 	uint8 writeComplete=0;
 	FT_STATUS status;
-	send_dummy();
 
 	/* CS_High + Write command + Address */
-	sizeToTransfer=MRISCV_SPI_COMM_RESET_BITS+10;
+	sizeToTransfer=MRISCV_SPI_COMM_RESET_BITS;
 	sizeTransfered=0;
-	//buffer[0] = ;	/* Write command (2bit, 6-bit displaced)*/
-	buffer[0] = (MRISCV_TASK_STATUS << 6) | (state & 0x3F); 								/*MSB  6-bit addr bits (IGNORED)*/
-	buffer[1] = state; 							 				/*Next 8-bit addr bits (IGNORED)*/
-	buffer[2] = state; 							 				/*Next 8-bit addr bits (IGNORED)*/
-	buffer[3] = state; 							 				/*Next 8-bit addr bits (IGNORED)*/
-	buffer[4] = state; 							 				/*Last 2-bit addr bits, MSB 6-bit data bits (IGNORED)*/
-	buffer[5] = state; 											/*Next 8-bit data bits (IGNORED)*/
-	buffer[6] = state; 											/*Next 8-bit data bits (IGNORED)*/
-	buffer[7] = state; 											/*Next 8-bit data bits (IGNORED)*/
-	buffer[8] = state;										/*Last 2-bit data bits (RESET STATE)*/
-	buffer[9] = state;										/*Last 2-bit data bits (RESET STATE)*/
+	buffer[0] = MRISCV_TASK_STATUS << 6;	/* Write command (2bit, 6-bit displaced)*/
+	buffer[0] = buffer[0] | 0; 								/*MSB  6-bit addr bits (IGNORED)*/
+	buffer[1] = 0; 							 				/*Next 8-bit addr bits (IGNORED)*/
+	buffer[2] = 0; 							 				/*Next 8-bit addr bits (IGNORED)*/
+	buffer[3] = 0; 							 				/*Next 8-bit addr bits (IGNORED)*/
+	buffer[4] = 0; 							 				/*Last 2-bit addr bits, MSB 6-bit data bits (IGNORED)*/
+	buffer[5] = 0; 											/*Next 8-bit data bits (IGNORED)*/
+	buffer[6] = 0; 											/*Next 8-bit data bits (IGNORED)*/
+	buffer[7] = 0; 											/*Next 8-bit data bits (IGNORED)*/
+	buffer[8] = state << 6;								/*Last 2-bit data bits (RESET STATE)*/
 	status = SPI_Write(ftHandle, buffer, sizeToTransfer, &sizeTransfered,
 		SPI_TRANSFER_OPTIONS_SIZE_IN_BITS|
 		SPI_TRANSFER_OPTIONS_CHIPSELECT_ENABLE|
@@ -484,7 +453,12 @@ static int reset_status(uint8 state)
 	APP_CHECK_STATUS(status);
 	
 	/* Dummy Bits, for issue aditional clk cycles */
-	send_dummy();
+	sizeToTransfer=MRISCV_SPI_DUMMY_BITS;
+	sizeTransfered=0;
+	buffer[0] = 0;
+	status = SPI_Write(ftHandle, buffer, sizeToTransfer, &sizeTransfered,
+		SPI_TRANSFER_OPTIONS_SIZE_IN_BITS);
+	APP_CHECK_STATUS(status);
 
 	return 1;
 }
@@ -506,6 +480,7 @@ int main(int argc, char **argv)
 {
 	FT_STATUS status = FT_OK;
 	FT_DEVICE_LIST_INFO_NODE devList = {0};
+	ChannelConfig channelConf = {0};
 	uint8 address = 0;
 	uint32 channels = 0;
 	uint8 latency = 255;
@@ -554,7 +529,7 @@ int main(int argc, char **argv)
 				printf(" Description=%s\n",devList.Description);
 				printf(" ftHandle=0x%x\n",devList.ftHandle); 
 			}
-			if(/*devList.Flags == 0x2 && devList.Type == 0x8 && */devList.ID == 0x4036014)
+			if(devList.Flags == 0x2 && devList.Type == 0x8 && devList.ID == 0x4036001)
 			{
 				dev_to_open = i;
 				break;
@@ -568,13 +543,11 @@ int main(int argc, char **argv)
 		status = SPI_InitChannel(ftHandle,&channelConf);
 		APP_CHECK_STATUS_INV(status);
 		
-		send_dummy();
-		
 		if(arguments.act)
 		{
-			if(arguments.verbose) printf("Putting mRISC-V reset in 1...\n");
-			if(!reset_status(0xFF)) {fprintf(stderr, "ERROR: Cannot activate the mRISC-V, re-program it and try again\n"); goto PANIC_EXIT;}
-			if(arguments.verbose) printf("Sucess reset to 1.\n");
+			if(arguments.verbose) printf("Putting mRISC-V reset in 0...\n");
+			if(!reset_status(1)) {fprintf(stderr, "ERROR: Cannot activate the mRISC-V, re-program it and try again\n"); goto PANIC_EXIT;}
+			if(arguments.verbose) printf("Sucess reset to 0.\n");
 			goto NORMAL_EXIT;
 		}
 		
@@ -596,29 +569,29 @@ int main(int argc, char **argv)
 		
 		else if(arguments.isfile && arguments.isdump)
 		{
-			if(arguments.verbose) printf("Putting mRISC-V reset in 0...\n");
+			if(arguments.verbose) printf("Putting mRISC-V reset in 1...\n");
 			if(!reset_status(0)) {fprintf(stderr, "ERROR: Cannot deactivate the mRISC-V, re-program it and try again\n"); goto PANIC_EXIT;}
-			if(arguments.verbose) printf("Sucess reset to 0.\n");
+			if(arguments.verbose) printf("Sucess reset to 1.\n");
 			
-			FILE *IN_FILE;
+			FILE *IN;
 			if(arguments.verbose) printf("Trying to open specified file\n");
-    		IN_FILE = fopen(arguments.strFile,"wb");
-    		if(IN_FILE == NULL) {fprintf(stderr, "ERROR: Failed to open data file.\n"); goto PANIC_EXIT;}
+    		IN = fopen(arguments.strFile,"wb");
+    		if(IN == NULL) {fprintf(stderr, "ERROR: Failed to open data file.\n"); goto PANIC_EXIT;}
 			
 			for(i = arguments.addrdump; i < (arguments.addrdump+arguments.sizedump); i+=4)
 			{
 				if(arguments.verbose) printf("Send command READ 0x%x.", i);
 				if(!read_single_word(i, &data)) {fprintf(stderr, "ERROR: Cannot send command READ 0x%x.\n", i); goto PANIC_EXIT;}
 				if(arguments.verbose) printf(" Returned 0x%x.\n", data);
-				fwrite(&data, 4, 1, IN_FILE);
+				fwrite(&data, 4, 1, IN);
 			}
-			fclose(IN_FILE);
+			fclose(IN);
 			
 			if(!arguments.noact)
 			{
-				if(arguments.verbose) printf("Putting mRISC-V reset in 1...\n");
-				if(!reset_status(0xFF)) {fprintf(stderr, "ERROR: Cannot activate the mRISC-V, re-program it and try again\n"); goto PANIC_EXIT;}
-				if(arguments.verbose) printf("Sucess reset to 1.\n");
+				if(arguments.verbose) printf("Putting mRISC-V reset in 0...\n");
+				if(!reset_status(1)) {fprintf(stderr, "ERROR: Cannot activate the mRISC-V, re-program it and try again\n"); goto PANIC_EXIT;}
+				if(arguments.verbose) printf("Sucess reset to 0.\n");
 			}
 		}
 		
@@ -627,38 +600,28 @@ int main(int argc, char **argv)
 			if(arguments.verbose) printf("Putting mRISC-V reset in 1...\n");
 			if(!reset_status(0)) {fprintf(stderr, "ERROR: Cannot deactivate the mRISC-V, re-program it and try again\n"); goto PANIC_EXIT;}
 			if(arguments.verbose) printf("Sucess reset to 1.\n");
-			FILE *IN_FILE;
+			FILE *IN;
 			if(arguments.verbose) printf("Trying to open specified file\n");
-    		IN_FILE = fopen(arguments.strFile,"rb");
-    		if(IN_FILE == NULL) {fprintf(stderr, "ERROR: Failed to open data file.\n"); goto PANIC_EXIT;}
-			fseek(IN_FILE,0,SEEK_END);
-			file_size = ftell(IN_FILE);
-			fseek(IN_FILE,0,SEEK_SET);
+    		IN = fopen(arguments.strFile,"rb");
+    		if(IN == NULL) {fprintf(stderr, "ERROR: Failed to open data file.\n"); goto PANIC_EXIT;}
+			fseek(IN,0,SEEK_END);
+			file_size = ftell(IN);
+			fseek(IN,0,SEEK_SET);
 			
 			if(file_size > MRISCV_MAX_SIZE && !arguments.force) {fprintf(stderr, "ERROR: File size is too big (max 4096 bytes), please use -f option.\n"); goto PANIC_EXIT;}
 			file_size = min(MRISCV_MAX_SIZE, file_size);
 			
-			for(i = 0; i < (file_size/4); i+=1)
+			for(i = 0; i < file_size; i+=4)
 			{
-				fread(&data, 4, 1, IN_FILE);
-				while(1)
-				{
-					uint32 datar;
-					if(arguments.verbose) printf("Send command WRITE 0x%x 0x%x.\n", i, data);
-					if(!write_single_word(i, data)) {fprintf(stderr, "ERROR: Cannot send command WRITE 0x%x 0x%x.\n", i, data); goto PANIC_EXIT;}
-					if(arguments.verbose) printf("Send command READ 0x%x.\n", i);
-					if(!read_single_word(i, &datar)) {fprintf(stderr, "ERROR: Cannot send command READ 0x%x.\n", i); goto PANIC_EXIT;}
-					
-					if(data != datar) printf("ERROR: read and written data is different, retrying... (0x%x != 0x%x)\n", data, datar);
-					else break;
-				}
-				
+				fread(&data, 4, 1, IN);
+				if(arguments.verbose) printf("Send command WRITE 0x%x 0x%x.\n", i, data);
+				if(!write_single_word(i, data)) {fprintf(stderr, "ERROR: Cannot send command WRITE 0x%x 0x%x.\n", i, data); goto PANIC_EXIT;}
 			}
-			fclose(IN_FILE);
+			fclose(IN);
 			if(!arguments.noact)
 			{
 				if(arguments.verbose) printf("Putting mRISC-V reset in 0...\n");
-				if(!reset_status(0xFF)) {fprintf(stderr, "ERROR: Cannot activate the mRISC-V, re-program it and try again\n"); goto PANIC_EXIT;}
+				if(!reset_status(1)) {fprintf(stderr, "ERROR: Cannot activate the mRISC-V, re-program it and try again\n"); goto PANIC_EXIT;}
 				if(arguments.verbose) printf("Sucess reset to 0.\n");
 			}
 		}
