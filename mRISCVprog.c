@@ -18,7 +18,8 @@
  */
 
 // compile using:
-// gcc -m32 -Wall mRISCVprog.c -o mRISCVprog -L./ -lMPSSE -lftd2xx -ldl
+// gcc -Wall mRISCVprog.c -o mRISCVprog -L./ -lMPSSE -lftd2xx -ldl
+// gcc -Wall mRISCVprog.c -DGW32C -o mRISCVprog.exe -L./ -lMPSSE -lftd2xx -lgw32c -lintl-8
 // execute it using:
 // LD_LIBRARY_PATH=$LD_LIBRARY_PATH:./ ./mRISCVprog
 /******************************************************************************/
@@ -31,7 +32,7 @@
 #include <argp.h>
 /* OS specific libraries */
 #ifdef _WIN32
-#include<windows.h>
+//#include<windows.h>
 #endif
 
 #ifdef __linux
@@ -39,7 +40,7 @@
 #endif
 
 /* Include D2XX header*/
-#include "WinTypes.h"
+//#include "WinTypes.h"
 #include "ftd2xx.h"
 
 /* Include libMPSSE header */
@@ -599,19 +600,19 @@ int main(int argc, char **argv)
 			if(!reset_status(0)) {fprintf(stderr, "ERROR: Cannot deactivate the mRISC-V, re-program it and try again\n"); goto PANIC_EXIT;}
 			if(arguments.verbose) printf("Sucess reset to 0.\n");
 			
-			FILE *IN;
+			FILE *IN_FILE;
 			if(arguments.verbose) printf("Trying to open specified file\n");
-    		IN = fopen(arguments.strFile,"wb");
-    		if(IN == NULL) {fprintf(stderr, "ERROR: Failed to open data file.\n"); goto PANIC_EXIT;}
+    		IN_FILE = fopen(arguments.strFile,"wb");
+    		if(IN_FILE == NULL) {fprintf(stderr, "ERROR: Failed to open data file.\n"); goto PANIC_EXIT;}
 			
 			for(i = arguments.addrdump; i < (arguments.addrdump+arguments.sizedump); i+=4)
 			{
 				if(arguments.verbose) printf("Send command READ 0x%x.", i);
 				if(!read_single_word(i, &data)) {fprintf(stderr, "ERROR: Cannot send command READ 0x%x.\n", i); goto PANIC_EXIT;}
 				if(arguments.verbose) printf(" Returned 0x%x.\n", data);
-				fwrite(&data, 4, 1, IN);
+				fwrite(&data, 4, 1, IN_FILE);
 			}
-			fclose(IN);
+			fclose(IN_FILE);
 			
 			if(!arguments.noact)
 			{
@@ -626,20 +627,20 @@ int main(int argc, char **argv)
 			if(arguments.verbose) printf("Putting mRISC-V reset in 1...\n");
 			if(!reset_status(0)) {fprintf(stderr, "ERROR: Cannot deactivate the mRISC-V, re-program it and try again\n"); goto PANIC_EXIT;}
 			if(arguments.verbose) printf("Sucess reset to 1.\n");
-			FILE *IN;
+			FILE *IN_FILE;
 			if(arguments.verbose) printf("Trying to open specified file\n");
-    		IN = fopen(arguments.strFile,"rb");
-    		if(IN == NULL) {fprintf(stderr, "ERROR: Failed to open data file.\n"); goto PANIC_EXIT;}
-			fseek(IN,0,SEEK_END);
-			file_size = ftell(IN);
-			fseek(IN,0,SEEK_SET);
+    		IN_FILE = fopen(arguments.strFile,"rb");
+    		if(IN_FILE == NULL) {fprintf(stderr, "ERROR: Failed to open data file.\n"); goto PANIC_EXIT;}
+			fseek(IN_FILE,0,SEEK_END);
+			file_size = ftell(IN_FILE);
+			fseek(IN_FILE,0,SEEK_SET);
 			
 			if(file_size > MRISCV_MAX_SIZE && !arguments.force) {fprintf(stderr, "ERROR: File size is too big (max 4096 bytes), please use -f option.\n"); goto PANIC_EXIT;}
 			file_size = min(MRISCV_MAX_SIZE, file_size);
 			
 			for(i = 0; i < (file_size/4); i+=1)
 			{
-				fread(&data, 4, 1, IN);
+				fread(&data, 4, 1, IN_FILE);
 				while(1)
 				{
 					uint32 datar;
@@ -653,7 +654,7 @@ int main(int argc, char **argv)
 				}
 				
 			}
-			fclose(IN);
+			fclose(IN_FILE);
 			if(!arguments.noact)
 			{
 				if(arguments.verbose) printf("Putting mRISC-V reset in 0...\n");

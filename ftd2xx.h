@@ -57,7 +57,7 @@ kernel & user mode
 
 #ifndef _WINDOWS
 #include <pthread.h>
-#include "WinTypes.h"
+//#include "WinTypes.h"
 /** Substitute for HANDLE returned by Windows CreateEvent API */
 typedef struct _EVENT_HANDLE{
 	pthread_cond_t eCondVar;
