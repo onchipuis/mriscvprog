@@ -1,29 +1,8 @@
 # mriscvprog 
 
-A programmer of mriscv using LIBMPSSE SPI library.
+mriscv programer using LIBMPSSE SPI library.
 
-# PRIMARY WARNING:
-
-THIS PROGRAM IS NOT 100% FUNCTIONAL, in fact this is a 0.1 version.
-For programming mRISCV on fpga or chip version needed to do this:
-
-- run ./mRISCVtest1, then press RESET button on the board, then ctrl-c it.
-- run ./do.sh for some test programation.
-- run ./mRISCVtest1, then press RESET button on the board again, then ctrl-c it.
-- run ./mRISCVprog -a 0 -d [first opcode_hex], this forces to be written the 
-  first RAM address. (This needs to be run a couple of times)
-- run ./mRISCVprog -c for activating mriscvcore.
-
-This worked for us, its very ugly and we promise to fix it as soon as possible.
-
-UPDATE 2:
-
-- run ./mRISCVtest1, then press RESET button on the board, then ctrl-c it.
-- run ./do.sh for some test programation.
-
-Now is easier to program this thing
-
-# DOCUMENTATION:
+DOCUMENTATION:
 
 Usage: mRISCVprog [OPTION...] FILE
 mRISCVprog -- a program using FTDI USB-MPSSE SPI function for programming a
@@ -45,38 +24,40 @@ mRISC-V
 
 BASIC USES:
 
-- For programming just use this command
+- For programming use this command
 ./mRISCVprog /path/to/dat 
 
-- For programming and DO NOT activate core, use this command:
+- For programming WITHOUT activating the core, use this command:
 ./mRISCVprog /path/to/dat -n
 
-- For ONLY activate core use:
+- For core use activation (ONLY):
 ./mRISCprog -c
 
-- For reading at random address:
+- For reading in a specific address:
 ./mRISCprog -a [address]
 
-- For writting at random address some data:
+- For writting in a specific address some data:
 ./mRISCprog -a [address] -d [data]
 
-- For dumping data (experimental) use this:
+- For dumping data (experimental):
 ./mRISCprog -u START,END
 
+NOTES:
 - Every address and data must be indicated using hexadecimal values
 - Do not use 0xXXXX values, only XXXX values
 - Use -v for use verbose for knowing "what's happening".
 
 HOW IT WORKS:
 
-Common programming is issued to the microcontroller in those single steps:
+Common programming is issued to the microcontroller following the 
+next three simple steps:
 - Putting RESET to 0 (deactivate core)
 - Write from address 0 to addres 3FF the RAM data.
 - Putting RESET to 1 (activate core)
 
 WARNINGS:
 
-- Need to unload ftdi serial drivers, execute the next command to do it:
+- To unload of the ftdi serial drivers, execute the next commands:
 rmmod ftdi_sio
 rmmod usbserial
-- mRISCVtest only issues "is busy commands" and returns state.
+- mRISCVtest only displays a "is busy commands" message and returns state.
