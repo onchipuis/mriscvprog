@@ -51,9 +51,10 @@ HOW IT WORKS:
 
 Common programming is issued to the microcontroller following the 
 next three simple steps:
-- Putting RESET to 0 (deactivate core)
-- Write from address 0 to addres 3FF the RAM data.
-- Putting RESET to 1 (activate core)
+- RESET is set to 0 (deactivate core).
+- The program is written in the RAM (any address from 0 to 3FF).
+- RESET is set back to 1 (activate core).
+
 
 WARNINGS:
 
