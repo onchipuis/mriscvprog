@@ -3,7 +3,7 @@
 mriscv programer using LIBMPSSE SPI library.
 
 DOCUMENTATION:
-
+```
 Usage: mRISCVprog [OPTION...] FILE
 mRISCVprog -- a program using FTDI USB-MPSSE SPI function for programming a
 mRISC-V
@@ -21,7 +21,7 @@ mRISC-V
   -v, --verbose              Produce verbose output
   -?, --help                 Give this help list
       --usage                Give a short usage message
-
+```
 BASIC USES:
 
 - For programming use this command
