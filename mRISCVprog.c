@@ -37,6 +37,7 @@
 
 #ifdef __linux
 #include<dlfcn.h>
+#include "WinTypes.h"
 #endif
 
 /* Include D2XX header*/
