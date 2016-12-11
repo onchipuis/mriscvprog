@@ -67,7 +67,7 @@ encountered \n",__FILE__, __LINE__, __FUNCTION__);return 1;}else{;}};
 /* Application specific macro definations */
 #define CHANNEL_TO_OPEN				0	/*0 for first available channel, 1 for next... */
 #define SPI_DEVICE_BUFFER_SIZE		256
-#define SPI_CLOCK_RATE_HZ			10000
+#define SPI_CLOCK_RATE_HZ			1000000
 #define MRISCV_MAX_SIZE				4096
 #define MRISCV_SPI_DUMMY_BITS		10
 #define MRISCV_SPI_TASK_BITS		2
@@ -96,7 +96,7 @@ encountered \n",__FILE__, __LINE__, __FUNCTION__);return 1;}else{;}};
 struct arguments
 {
   char *strFile;                /* the FILE arg */
-  int silent, verbose, force, isfile, act, noact, isaddr, isdata, isdump;
+  int silent, verbose, force, isfile, act, noact, nodeact, isaddr, isdata, isdump, check;
   uint32 addr;
   uint32 data;
   uint32 addrdump;
@@ -129,10 +129,12 @@ static struct argp_option options[] = {
   {"silent",   's', 0,      OPTION_ALIAS },
   {"force",    'f', 0,      0,  "Force to program the device" },
   {"noact",    'n', 0,      0,  "DO NOT activate the device after programming (Do not use with -c)" },
+  {"nodeact",  'e', 0,      0,  "DO NOT DEactivate the device after programming (Do not use with -c)" },
   {"act",      'c', 0,      0,  "ONLY activate the device (Do not use with -n)" },
   {"addr",     'a', "DATA",      0,  "Read data from device at specified addr (For write use also -d)" },
   {"data",     'd', "DATA",      0,  "Write this data to device at specified addr (addr required)" },
-  {"data",     'u', "START,SIZE",      0,  "Dump memory from START to START+SIZE" },
+  {"dump",     'u', "START,SIZE",      0,  "Dump memory from START to START+SIZE" },
+  {"check",    'h', 0,      0,  "Check the program" },
   { 0 }
 };
 /* Our argp parser. */
@@ -174,6 +176,9 @@ parse_opt (int key, char *arg, struct argp_state *state)
     case 'n':
       arguments->noact = 1;
       break;
+    case 'e':
+      arguments->nodeact = 1;
+      break;
     case 'c':
       arguments->act = 1;
       break;
@@ -184,6 +189,9 @@ parse_opt (int key, char *arg, struct argp_state *state)
     case 'd':
       arguments->isdata = 1;
       arguments->data = arg ? strtol(arg, NULL, 16) : 0;
+      break;
+    case 'h':
+      arguments->check = 1;
       break;
     case 'u':
       arguments->isdump = 1;
@@ -625,13 +633,11 @@ int main(int argc, char **argv)
 		
 		else if(arguments.isfile)
 		{
-			if(arguments.verbose) printf("Putting mRISC-V reset in 1...\n");
-			if(!reset_status(0)) {fprintf(stderr, "ERROR: Cannot deactivate the mRISC-V, re-program it and try again\n"); goto PANIC_EXIT;}
-			if(arguments.verbose) printf("Sucess reset to 1.\n");
 			FILE *IN_FILE;
 			if(arguments.verbose) printf("Trying to open specified file\n");
-    		IN_FILE = fopen(arguments.strFile,"rb");
-    		if(IN_FILE == NULL) {fprintf(stderr, "ERROR: Failed to open data file.\n"); goto PANIC_EXIT;}
+  		IN_FILE = fopen(arguments.strFile,"rb");
+  		if(IN_FILE == NULL) {fprintf(stderr, "ERROR: Failed to open data file.\n"); goto PANIC_EXIT;}
+  		
 			fseek(IN_FILE,0,SEEK_END);
 			file_size = ftell(IN_FILE);
 			fseek(IN_FILE,0,SEEK_SET);
@@ -644,18 +650,30 @@ int main(int argc, char **argv)
 				fread(&data, 4, 1, IN_FILE);
 				while(1)
 				{
-					uint32 datar;
 					if(arguments.verbose) printf("Send command WRITE 0x%x 0x%x.\n", i, data);
 					if(!write_single_word(i, data)) {fprintf(stderr, "ERROR: Cannot send command WRITE 0x%x 0x%x.\n", i, data); goto PANIC_EXIT;}
-					if(arguments.verbose) printf("Send command READ 0x%x.\n", i);
-					if(!read_single_word(i, &datar)) {fprintf(stderr, "ERROR: Cannot send command READ 0x%x.\n", i); goto PANIC_EXIT;}
+					if(arguments.check)
+					{
+					  uint32 datar;
+					  if(arguments.verbose) printf("Send command READ 0x%x.\n", i);
+					  if(!read_single_word(i, &datar)) {fprintf(stderr, "ERROR: Cannot send command READ 0x%x.\n", i); goto PANIC_EXIT;}
 					
-					if(data != datar) printf("ERROR: read and written data is different, retrying... (0x%x != 0x%x)\n", data, datar);
+					  if(data != datar) printf("ERROR: read and written data is different, retrying... (0x%x != 0x%x)\n", data, datar);
+					  else break;
+					}
 					else break;
 				}
 				
 			}
 			fclose(IN_FILE);
+			// Put the reset thing
+			if(!arguments.nodeact)
+			{
+			  if(arguments.verbose) printf("Putting mRISC-V reset in 1...\n");
+			  if(!reset_status(0)) {fprintf(stderr, "ERROR: Cannot deactivate the mRISC-V, re-program it and try again\n"); goto PANIC_EXIT;}
+			  if(arguments.verbose) printf("Sucess reset to 1.\n");
+			}
+			
 			if(!arguments.noact)
 			{
 				if(arguments.verbose) printf("Putting mRISC-V reset in 0...\n");
