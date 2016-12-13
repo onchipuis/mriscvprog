@@ -30,6 +30,7 @@
 #include<stdlib.h>
 #include<string.h>
 #include <argp.h>
+#include<unistd.h>
 /* OS specific libraries */
 #ifdef _WIN32
 //#include<windows.h>
@@ -86,7 +87,7 @@ encountered \n",__FILE__, __LINE__, __FUNCTION__);return 1;}else{;}};
 #define MRISCV_TASK_READ			0x1
 #define MRISCV_TASK_WRITE			0x2
 #define MRISCV_TASK_SEND			0x3
-#define MAX_COUNT_TIMEOUT			1000
+#define MAX_COUNT_TIMEOUT			10
 
 /******************************************************************************/
 /*								Struct definitions							  	    */
@@ -108,6 +109,7 @@ struct arguments
 /******************************************************************************/
 static error_t
 parse_opt (int key, char *arg, struct argp_state *state);
+static int reset_status(uint8 state);
 
 /******************************************************************************/
 /*								Global variables							  	    */
@@ -354,6 +356,13 @@ RESTART_WRITE:
 			{
 				count = 0;
 				printf("TIMEOUT WRITE, RETRYING\n");
+				reset_status(0xFF);
+				
+				sleep(2);
+				
+				reset_status(0x0);
+				
+				sleep(2);
 				goto RESTART_WRITE;
 			}
 		}
