@@ -31,6 +31,7 @@
 #include<string.h>
 #include <argp.h>
 #include<unistd.h>
+#include <signal.h>
 /* OS specific libraries */
 #ifdef _WIN32
 //#include<windows.h>
@@ -103,6 +104,7 @@ struct arguments
   uint32 addrdump;
   uint32 sizedump;
 };
+struct arguments arguments;
 
 /******************************************************************************/
 /*						Public function declarations					  		   */
@@ -356,13 +358,19 @@ RESTART_WRITE:
 			{
 				count = 0;
 				printf("TIMEOUT WRITE, RETRYING\n");
-				reset_status(0xFF);
+				if(!arguments.nodeact)
+				{
+				  reset_status(0xFF);
 				
-				sleep(2);
+				  sleep(2);
+				}
 				
-				reset_status(0x0);
-				
-				sleep(2);
+				if(!arguments.nodeact)
+				{
+			    reset_status(0x0);
+			
+			    sleep(2);
+				}
 				goto RESTART_WRITE;
 			}
 		}
@@ -508,6 +516,33 @@ static int reset_status(uint8 state)
 }
 
 /*!
+ * \brief Signal callback for SIGTERM
+ *
+ * This function will close the MPSSE library, for avoiding some undesired behavioral.
+ *
+ * \param[in] sig Signal number
+ * \param[in] siginfo Signal structure
+ * \param[in] context Aditional context passed to the function
+ * \return none 
+ * \sa
+
+ * \note
+ * \warning
+
+ */
+void termination_handler (int sig)
+{
+	FT_STATUS status = FT_OK;
+	send_dummy();
+	status = SPI_CloseChannel(ftHandle);
+
+#ifdef _MSC_VER
+	Cleanup_libMPSSE();
+#endif
+	fprintf(stderr, "mRISCVprog interrupted!\n");
+}
+
+/*!
  * \brief Main function / Entry point to the application
  *
  * This function is the entry point to the sample application. Reads the data from a .dat file, then
@@ -531,10 +566,18 @@ int main(int argc, char **argv)
 	uint32 file_size;
 	uint32 data;
 	uint32 dev_to_open;
-	struct arguments arguments;
-	memset(&arguments, 0, sizeof(struct arguments));
+	
+	/* signal binding*/
+	if (signal (SIGINT, termination_handler) == SIG_IGN)
+    signal (SIGINT, SIG_IGN);
+  if (signal (SIGHUP, termination_handler) == SIG_IGN)
+    signal (SIGHUP, SIG_IGN);
+  if (signal (SIGTERM, termination_handler) == SIG_IGN)
+    signal (SIGTERM, SIG_IGN);
+	
 	
 	/*Argument checking*/	
+	memset(&arguments, 0, sizeof(struct arguments));
 	if(argp_parse (&argp, argc, argv, 0, 0, &arguments) != 0) return 1;
 	if(arguments.act && arguments.noact) {fprintf(stderr, "ERROR: Argument mismatch. Cannot use -c with -n\n"); return -1;}
 	
@@ -572,7 +615,7 @@ int main(int argc, char **argv)
 				printf(" Description=%s\n",devList.Description);
 				printf(" ftHandle=0x%x\n",devList.ftHandle); 
 			}
-			if(/*devList.Flags == 0x2 && devList.Type == 0x8 && */devList.ID == 0x4036014)
+			if(/*devList.Flags == 0x2 && devList.Type == 0x8 && */devList.ID == 0x4036014/* && i == 0*/)
 			{
 				dev_to_open = i;
 				break;
@@ -676,18 +719,24 @@ int main(int argc, char **argv)
 			}
 			fclose(IN_FILE);
 			// Put the reset thing
-			if(!arguments.nodeact)
+			int l;
+			for(l = 0; l < 1; l++)
 			{
-			  if(arguments.verbose) printf("Putting mRISC-V reset in 1...\n");
-			  if(!reset_status(0)) {fprintf(stderr, "ERROR: Cannot deactivate the mRISC-V, re-program it and try again\n"); goto PANIC_EXIT;}
-			  if(arguments.verbose) printf("Sucess reset to 1.\n");
-			}
+			  if(!arguments.nodeact)
+			  {
+			    if(arguments.verbose) printf("Putting mRISC-V reset in 1...\n");
+			    if(!reset_status(0)) {fprintf(stderr, "ERROR: Cannot deactivate the mRISC-V, re-program it and try again\n"); goto PANIC_EXIT;}
+			    if(arguments.verbose) printf("Sucess reset to 1.\n");
+			    sleep(1);
+			  }
 			
-			if(!arguments.noact)
-			{
-				if(arguments.verbose) printf("Putting mRISC-V reset in 0...\n");
-				if(!reset_status(0xFF)) {fprintf(stderr, "ERROR: Cannot activate the mRISC-V, re-program it and try again\n"); goto PANIC_EXIT;}
-				if(arguments.verbose) printf("Sucess reset to 0.\n");
+			  if(!arguments.noact)
+			  {
+				  if(arguments.verbose) printf("Putting mRISC-V reset in 0...\n");
+				  if(!reset_status(0xFF)) {fprintf(stderr, "ERROR: Cannot activate the mRISC-V, re-program it and try again\n"); goto PANIC_EXIT;}
+				  if(arguments.verbose) printf("Sucess reset to 0.\n");
+				  sleep(1);
+			  }
 			}
 		}
 		
