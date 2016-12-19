@@ -18,8 +18,8 @@
  */
 
 // compile using:
-// gcc -Wall mRISCVprog.c -o mRISCVprog -L./ -lMPSSE -lftd2xx -ldl
-// gcc -Wall mRISCVprog.c -DGW32C -o mRISCVprog.exe -L./ -lMPSSE -lftd2xx -lgw32c -lintl-8
+// gcc -Wall mRISCVprog.c greset.c -o mRISCVprog -L./ -lMPSSE -lftd2xx -ldl
+// gcc -Wall mRISCVprog.c greset.c -DGW32C -o mRISCVprog.exe -L./ -lMPSSE -lftd2xx -lgw32c -lintl-8
 // execute it using:
 // LD_LIBRARY_PATH=$LD_LIBRARY_PATH:./ ./mRISCVprog
 /******************************************************************************/
@@ -48,6 +48,9 @@
 
 /* Include libMPSSE header */
 #include "libMPSSE_spi.h"
+
+/* Include Global Reset*/
+#include "greset.h"
 
 /******************************************************************************/
 /*								Macro and type defines							   */
@@ -358,6 +361,8 @@ RESTART_WRITE:
 			{
 				count = 0;
 				printf("TIMEOUT WRITE, RETRYING\n");
+			  sendGlobalReset(1);
+			  send_dummy();
 				if(!arguments.nodeact)
 				{
 				  reset_status(0xFF);
@@ -365,6 +370,8 @@ RESTART_WRITE:
 				  sleep(2);
 				}
 				
+			  sendGlobalReset(0);
+			  send_dummy();
 				if(!arguments.nodeact)
 				{
 			    reset_status(0x0);
@@ -574,6 +581,9 @@ int main(int argc, char **argv)
     signal (SIGHUP, SIG_IGN);
   if (signal (SIGTERM, termination_handler) == SIG_IGN)
     signal (SIGTERM, SIG_IGN);
+    
+  /* Init Global Reset */
+  initGlobalReset();
 	
 	
 	/*Argument checking*/	
@@ -754,6 +764,9 @@ NOTHING_TO_DO:
 	
 NORMAL_EXIT:
 	status = SPI_CloseChannel(ftHandle);
+    
+  /* Fini Global Reset */
+  finiGlobalReset();
 
 #ifdef _MSC_VER
 	Cleanup_libMPSSE();
@@ -764,6 +777,9 @@ NORMAL_EXIT:
 
 PANIC_EXIT:
 	status = SPI_CloseChannel(ftHandle);
+    
+  /* Fini Global Reset */
+  finiGlobalReset();
 
 #ifdef _MSC_VER
 	Cleanup_libMPSSE();
