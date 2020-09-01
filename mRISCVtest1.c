@@ -7,8 +7,6 @@
  * Copyleft 2015-2016 On-Chip Investigation Group at UIS
  *
  *
- * THIS SOFTWARE IS PROVIDED BY UIS AND *PUT AWESOME LICENCE HERE*
- * NOT WARRANTY IF I BURN THE F*CK UP THE CHIP
  *
  * Project: libMPSSE
  * Module: SPI libMPSSE mRISC-V programmer
